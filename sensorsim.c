@@ -7,43 +7,72 @@
 #include <linux/cdev.h>
 #include <linux/timer.h>
 
-#define RANDVAL_STRING_BUFSIZE 10
+void Sensor_TimerCallback(struct timer_list *timer);
 
+static u32 _randomSensorValue = 0;
+static ssize_t sensorValue_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf);
+static ssize_t sensorValue_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count);
 
-static ssize_t sysfs_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf);
-static ssize_t sysfs_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count);
+unsigned int _period = 500;
+static ssize_t period_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf);
+static ssize_t period_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count);
 
-static u32 randValue = 0;
-static char randValStringBuf[RANDVAL_STRING_BUFSIZE]; 
 
 static struct timer_list myTimer;
 
-struct kobject* kobj_ref;
-struct kobj_attribute sensorValue = __ATTR(sensorValue, 0660, sysfs_show, sysfs_store);
-
 void Sensor_TimerCallback(struct timer_list *timer)
 {
-    randValue = get_random_u32();
-    printk("SensorSim: new random value\n");
-    mod_timer(&myTimer, jiffies + msecs_to_jiffies(500));
+    _randomSensorValue = get_random_u32();
+    pr_debug("SensorSim: new random value: %d\n", _randomSensorValue);
+    mod_timer(&myTimer, jiffies + msecs_to_jiffies(_period));
 }
 
-static ssize_t sysfs_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)
+struct kobject* kobj_ref;
+struct kobj_attribute sensorValue = __ATTR(sensorValue, 0660, sensorValue_show, sensorValue_store);
+struct kobj_attribute period = __ATTR(period, 0660, period_show, period_store);
+
+static ssize_t sensorValue_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)
 {
-    return sprintf(buf, "%d", randValue);
+    return sprintf(buf, "%d", _randomSensorValue);
 }
 
-static ssize_t sysfs_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count)
+static ssize_t sensorValue_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count)
 {
+    return count;
+}
+
+static ssize_t period_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)
+{
+    return sprintf(buf, "%d", _period);
+}
+
+static ssize_t period_store(struct kobject* kobj, struct kobj_attribute* attr, const char* buf, size_t count)
+{
+    unsigned int tempValue = 0;
+    if(0 < sscanf(buf, "%d", &tempValue))
+    {
+        if(tempValue >= 100 && tempValue <= 5000)
+        {
+            _period = tempValue;
+            pr_info("SensorSim: period set to %d ms\n", _period);
+        }
+    }
     return count;
 }
 
 static int setup_sysfs(void)
 {
     kobj_ref = kobject_create_and_add("sensorsim", kernel_kobj);
+    //value
     if(sysfs_create_file(kobj_ref, &sensorValue.attr)){
         kobject_put(kobj_ref);
         sysfs_remove_file(kernel_kobj, &sensorValue.attr);
+        return -1;
+    }
+    //period
+    if(sysfs_create_file(kobj_ref, &period.attr)){
+        kobject_put(kobj_ref);
+        sysfs_remove_file(kernel_kobj, &period.attr);
         return -1;
     }
     return 0;
@@ -53,7 +82,7 @@ static int my_init(void)
 {
     timer_setup(&myTimer, Sensor_TimerCallback, 0);
     mod_timer(&myTimer, jiffies + msecs_to_jiffies(1000));
-    randValue = get_random_u32();
+    _randomSensorValue = get_random_u32();
     if(setup_sysfs() < 0){
         pr_warn("SensorSim: Creating sysfs file failed!\n");
         return -1;

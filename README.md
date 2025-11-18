@@ -32,5 +32,10 @@ To get the value from your sensor just access file /sys/kernel/sensorsim/value
 foo@bar:~/SensorSim_LinuxDriver$ cat /sys/kernel/sensorsim/sensorValue
 12345
 ```
+You can change period (ms) of the sensor value change by editing /sys/kernel/sensorsim/period 
+```shell
+foo@bar:~/SensorSim_LinuxDriver$ echo 1000 > /sys/kernel/sensorsim/period
+```
+You can set the period frm 100ms to 5000ms
 
 
